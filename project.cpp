@@ -121,7 +121,7 @@ int main()
             }
             Q[i][j] = (1 / float(nLinks[j])) * L[i][j];
         }
-    }
+    } 
 
     int e[n] = {1};
     int d[n] = {0};
@@ -241,6 +241,28 @@ int main()
         cout << "r_k " << r_k[i] << endl;
     }
 
+
+    for (int i = 0; i < n; i++) {
+        printf("\n");
+        for (int j = 0; j < n; j++)
+            printf("%8.2f  ", L[i][j]);
+    }
+    printf("\n\n");
+
+    for (int i = 0; i < n; i++) {
+        printf("\n");
+        for (int j = 0; j < n; j++)
+            printf("%8.2f  ", Q[i][j]);
+    }
+    printf("\n\nd\n");
+
+    for (int i = 0; i < n; i++){
+        printf("%8.2f  ", d[i]);
+    }
+    printf("\n\nd\n");
+    for (int i = 0; i < n; i++){
+        cout << d[i] << "\t" << endl;
+    }
     // // test matrix-vector multiplication function
     // vector<vector<float>> X(3);
     // for (int i = 0 ; i < 3 ; i++) {
@@ -281,4 +303,5 @@ int main()
     //     }
     // }
 }
+
 
