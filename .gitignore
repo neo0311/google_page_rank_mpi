@@ -3,3 +3,6 @@ Tutorial Files
 *.out
 *.py
 project
+test.c
+test_scatterv.cpp
+test_scatterv_new.cpp
