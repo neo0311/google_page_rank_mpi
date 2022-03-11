@@ -346,21 +346,19 @@ int main(int argc, char *argv[])
                 q_k_norm += fabs(q_k[i]);
             }
 
-            printf("\n\nq_k_norm_m\n");
+            // printf("\n\nq_k_norm_m\n");
 
-            for (i = 0; i < NUM_PAGES; i++){
-                printf("%8.2f  ",q_k_norm);
-            }
-            printf("\n\n");
-            //MPI_Bcast(&q_k, NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-            //MPI_Bcast(&q_k_norm, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+            // for (i = 0; i < NUM_PAGES; i++){
+            //     printf("%8.2f  ",q_k_norm);
+            // }
+            // printf("\n\n");
 
-            printf("\n\nq_k_m\n");
+            // printf("\n\nq_k_m\n");
 
-            for (i = 0; i < NUM_PAGES; i++){
-                printf("%8.2f  ", q_k[i]);
-            }
-            printf("\n\n");
+            // for (i = 0; i < NUM_PAGES; i++){
+            //     printf("%8.2f  ", q_k[i]);
+            // }
+            // printf("\n\n");
 
             // r_k vector
             // Send assembled vectors
@@ -407,6 +405,11 @@ int main(int argc, char *argv[])
             v++;
 
         }while  (v<ITERR);
+
+        if (rank == 0){
+
+            
+        }
 
         end_time = MPI_Wtime();
         printf("\nRunning Time = %f\n\n", end_time - start_time);

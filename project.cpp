@@ -36,6 +36,8 @@ double L1norm(vector<double> v, int n)
 
 int main()
 {
+    srand(17);
+    
     int n;
     cout << "Pick a dense matrix size: ";
     cin >> n;
@@ -62,6 +64,42 @@ int main()
     L[4][5] = 1;
     L[5][2] = 1;
     L[5][4] = 1;
+
+    int const rnd_zeros = ((n*n)*0.25)/n;
+    for (int i = 0; i < n; i++) {//iterate through a given set of rows of [A]
+        for (int j = 0; j < n; j++) 
+        {
+            
+            
+            if (i == j) {
+                L[i][j] = 0;
+            }else {
+
+                L[i][j] = 1;
+
+                }
+        }
+        for (int l = 0; l < rnd_zeros;)
+        {
+
+            int index = rand() % ((n) - 1);
+            std::cout << index << std::endl;
+            if (index != i)
+            {
+
+                L[i][index] = 0;
+                l++;
+            }
+        }
+    }
+
+    printf("\nL\n");
+    for (int i = 0; i < n; i++)
+    {
+        printf("\n");
+        for (int j = 0; j < n; j++)
+            printf("%8.2f  ", L[i][j]);
+    }
 
     // Create page-rank vector
     vector<double> r(n);
@@ -215,7 +253,7 @@ int main()
     double q_k_norm = 0;
 
      
-    while (k<30){
+    while (k<1){
         q_k = matVec(P, r_k_1, n);
         q_k_norm = L1norm(q_k, n);
         printf("\n\nr_k_1_loop\n");

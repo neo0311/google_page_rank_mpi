@@ -1,13 +1,5 @@
 /**********************************************************************************************
-* Matrix Multiplication Program using MPI.
-*
-* Viraj Brian Wijesuriya - University of Colombo School of Computing, Sri Lanka.
-* 
-* Works with any type of two matrixes [A], [B] which could be multiplied to produce a matrix [c].
-*
-* Master process initializes the multiplication operands, distributes the muliplication 
-* operation to worker processes and reduces the worker results to construct the final output.
-*  
+
 ************************************************************************************************/
 
 #include<stdio.h>
@@ -16,8 +8,7 @@
 #define NUM_PAGES 6
 #define M_C_TAG 1 //tag for messages sent from master to childs
 #define C_M_TAG 4 //tag for messages sent from childs to master
-#define ITERR 30
-void makeAB(); //makes the [A] and [B] matrixes
+#define ITERR 1
 void printArray(double mat[][NUM_PAGES], int rows); //print the content of output matrix [C];
 
 int rank; //process rank
@@ -88,7 +79,7 @@ int main(int argc, char *argv[])
             indices_M[i] = indices_M[i-1]+(NUM_PAGES*rows_to_send);
             indices_v[i] = indices_v[i-1]+(rows_to_send);
 
-            index += NUM_PAGES;
+            //index += NUM_PAGES;
 
         }
         // Calculate chunk sizes for each chunk
@@ -120,25 +111,27 @@ int main(int argc, char *argv[])
 
 
         // fill dense matrix based on web
-        L[0][1] = 1;
-        L[1][0] = 1;
+        // L[0][1] = 1;
+        // L[1][0] = 1;
 
-        L[2][1] = 1;
-        L[2][4] = 1;
-        L[2][5] = 1;
+        // L[2][1] = 1;
+        // L[2][4] = 1;
+        // L[2][5] = 1;
 
-        L[3][0] = 1;
+        // L[3][0] = 1;
 
-        L[3][4] = 1;
-        L[4][0] = 1;
-        L[4][1] = 1;
+        // L[3][4] = 1;
+        // L[4][0] = 1;
+        // L[4][1] = 1;
 
-        L[4][5] = 1;
-        L[5][2] = 1;
-        L[5][4] = 1;
+        // L[4][5] = 1;
+        // L[5][2] = 1;
+        // L[5][4] = 1;
         start_time = MPI_Wtime();
 
     }
+
+    
 
     double local_data_M[local_rows*NUM_PAGES] = {};
     double local_data_v[local_rows] = {};
@@ -173,6 +166,75 @@ int main(int argc, char *argv[])
             printf("%8.2d  ", indices_v[i]);
         }      
     }
+
+    int row_R = 0;
+    int col_R = 0;
+    if (rank == 0){
+        row_R = 0;
+    }else{
+        row_R = NUM_PAGES/size;
+    }
+
+    for (i = 0; i < local_rows * NUM_PAGES; i++){
+
+        if (((i ) % NUM_PAGES) == 0 && (i!=0))
+        {
+            row_R += 1;
+            col_R = 0;
+        }
+        if (row_R == col_R) {
+            local_data_M[i] = 0;
+        }else {
+
+            local_data_M[i] = 1;
+
+                
+        }
+        col_R += 1;
+    }
+    row_R = 0;
+    col_R = 0;
+
+    if (rank == 0){
+        row_R = 0;
+    }else{
+        row_R = NUM_PAGES/size;
+    }
+
+    for (i = 0; i < local_rows * NUM_PAGES; i++)
+    {
+                if (((i ) % NUM_PAGES) == 0 && (i!=0))
+                {
+                    row_R += 1;
+                    col_R = 0;
+                }
+                            
+                // if (row_R == col_R) {
+                //     local_data_M[i] = 0;
+                // }else {
+
+                //     local_data_M[i] = 1;
+
+                        
+                // }
+                if (((i ) % NUM_PAGES) == 0){
+                    for (j = 0; j < rnd_zeros;)
+                    {
+
+                        index = rand() % ((NUM_PAGES) - 1);
+                        if (index != row_R)
+                        {
+
+                            local_data_M[i + index] = 0;
+                            j++;
+                        }
+                        printf("\nrank: %d,index: %d, i: %d, row_R; %d, i+index: %d, L: %8.2f\n", rank, index, i, row_R, i+index, local_data_M[i + index]);
+                    }
+                    //printf("\ni: %d, index: %d, local_data: %f\n", (i+index),index, local_data_M[i + index]);
+                }
+                
+                col_R += 1;
+            }
 
     MPI_Gatherv(local_data_M, local_rows * NUM_PAGES, MPI_DOUBLE, L, counts_M, indices_M, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
@@ -416,8 +478,7 @@ int main(int argc, char *argv[])
                  &local_data_M, local_rows * NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     
-    int row_R = 0;
-    int col_R = 0;
+    col_R = 0;
     if (rank == 0){
         row_R = 0;
     }else{
@@ -498,7 +559,7 @@ int main(int argc, char *argv[])
 
         while (stop!=1){
 
-            std::cout << "\nStarted: " << v << std::endl;
+            printf("\nStarted: %d", v);
 
             //q_k vector
             //Send assembled P matrix to find number of links
@@ -541,21 +602,19 @@ int main(int argc, char *argv[])
                 q_k_norm += fabs(q_k[i]);
             }
 
-            printf("\n\nq_k_norm_m\n");
+            // printf("\n\nq_k_norm_m\n");
 
-            for (i = 0; i < NUM_PAGES; i++){
-                printf("%8.2f  ",q_k_norm);
-            }
-            printf("\n\n");
-            //MPI_Bcast(&q_k, NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-            //MPI_Bcast(&q_k_norm, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+            // for (i = 0; i < NUM_PAGES; i++){
+            //     printf("%8.2f  ",q_k_norm);
+            // }
+            // printf("\n\n");
 
-            printf("\n\nq_k_m before send\n");
+            // printf("\n\nq_k_m before send\n");
 
-            for (i = 0; i < NUM_PAGES; i++){
-                printf("%8.2f  ", q_k[i]);
-            }
-            printf("\n\n");
+            // for (i = 0; i < NUM_PAGES; i++){
+            //     printf("%8.2f  ", q_k[i]);
+            // }
+            // printf("\n\n");
 
             // r_k vector
             // Send assembled vectors
@@ -594,51 +653,32 @@ int main(int argc, char *argv[])
                 MPI_Recv(&temp[index_start], (index_end - index_start), MPI_DOUBLE, i, C_M_TAG + 29, MPI_COMM_WORLD, &status);
             }
 
-            printf("\n\nq_k_m after receive\n");
+            // printf("\n\nq_k_m after receive\n");
 
-            for (i = 0; i < NUM_PAGES; i++){
-                printf("%8.2f  ", q_k[i]);
-            }
-            printf("\n\n");
-            std::cout << "\nFinished: " << v << std::endl;
-            // for(int i = 0; i < size; i++){
-            //MPI_Isend(&v, 1, MPI_INT, i, M_C_TAG+79, MPI_COMM_WORLD, &request);
-
+            // for (i = 0; i < NUM_PAGES; i++){
+            //     printf("%8.2f  ", q_k[i]);
             // }
-
-
-
+            // printf("\n\n");
+            printf("\nFinished: %d", v);
             v++;
-            if (v==ITERR){
+            if (v>=ITERR){
                 stop = 1;
             }
-            printf("\nSTOP: %d", stop);
             MPI_Bcast(&stop, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
 
         }
-        // for(int i = 0; i < size; i++){
-        // MPI_Isend(NULL, 0, MPI_INT, i, 0, MPI_COMM_WORLD, &request);
-        // }
+
+        if (rank == 0){
+
+        printf("\n\nr_k after Gather\n");
+        for (i = 0; i < NUM_PAGES; i++) {
+            printf("%8.2f  ", r_k[i]);
+        }        
+        }
+
     }else{
-        //MPI_Recv(&v, 1, MPI_INT, 0, M_C_TAG + 79, MPI_COMM_WORLD, &status);
-        //printf("\n\nv: %d\n", v);
-        // while(flag_ == 1) {
-        //     // RECEIVE PORTION FROM ROOT using MPI_ANY_TAG
-        //     MPI_Recv(&v, 1, MPI_INT, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-        //     if ( status.MPI_TAG !=0 ) {
-        //         MPI_Recv(&v, 1, MPI_INT, 0, M_C_TAG + 25, MPI_COMM_WORLD, &status);
-        //         printf("\n\nv: %d\n", v);
-        //         // FIND MY OWN STRIPS
-        //         // SEND MY OWN STRIPS TO ROOT
-                
-        //     }
-        //     else{
-        //         flag_ = 0;
-                
-        //     }
-                
-        // }        
+         
 
         while(stop!=1){
 
@@ -652,23 +692,23 @@ int main(int argc, char *argv[])
             MPI_Recv(&q_k, NUM_PAGES, MPI_DOUBLE, 0, M_C_TAG + 24, MPI_COMM_WORLD, &status);
             MPI_Recv(&r_k_1,  NUM_PAGES, MPI_DOUBLE, 0, M_C_TAG + 96, MPI_COMM_WORLD, &status);
 
-            printf("\n\nr_k_1_nn: %d\n", v);
+            // printf("\n\nr_k_1_nn: %d\n", v);
 
-                for (i = 0; i < NUM_PAGES; i++){
-                    printf("%8.2f  ", r_k_1[i]);
-                }
-                printf("\n\n");
+            //     for (i = 0; i < NUM_PAGES; i++){
+            //         printf("%8.2f  ", r_k_1[i]);
+            //     }
+            //     printf("\n\n");
             
-            printf("\n\nP_c: %d\n", v);
+            // printf("\n\nP_c: %d\n", v);
 
-            for (i = index_start; i < index_end; i++){
+            // for (i = index_start; i < index_end; i++){
 
-                printf("\n\n");
-                for(j = 0; j < NUM_PAGES; j++){
+            //     printf("\n\n");
+            //     for(j = 0; j < NUM_PAGES; j++){
 
-                    printf("%8.2f  ", P[i][j]);
-                }
-            }
+            //         printf("%8.2f  ", P[i][j]);
+            //     }
+            // }
             // fill P matrix
             for (i = index_start; i < index_end; i++){
 
@@ -682,12 +722,12 @@ int main(int argc, char *argv[])
                 q_k[i] = sum;
             }
                 
-            printf("\n\nq_k_c\n");
+            // printf("\n\nq_k_c\n");
 
-                for (i = 0; i < NUM_PAGES; i++){
-                    printf("%8.2f  ", q_k[i]);
-                }
-                printf("\n\n");
+            //     for (i = 0; i < NUM_PAGES; i++){
+            //         printf("%8.2f  ", q_k[i]);
+            //     }
+            //     printf("\n\n");
             // send back the first index first without blocking, to the master
             MPI_Isend(&index_start, 1, MPI_INT, 0, C_M_TAG + 21, MPI_COMM_WORLD, &request);
             //send the last index next without blocking, to the master
@@ -709,19 +749,19 @@ int main(int argc, char *argv[])
             
             MPI_Recv(&q_k[index_start], (index_end - index_start), MPI_DOUBLE, 0, M_C_TAG + 98, MPI_COMM_WORLD, &status);
 
-            printf("\n\nq_k_norm_c\n");
+            // printf("\n\nq_k_norm_c\n");
 
-                for (i = 0; i < NUM_PAGES; i++){
-                    printf("%8.2f  ", q_k_norm);
-                }
-                printf("\n\n");
+            //     for (i = 0; i < NUM_PAGES; i++){
+            //         printf("%8.2f  ", q_k_norm);
+            //     }
+            //     printf("\n\n");
             
-            printf("\n\nq_k_c\n");
+            // printf("\n\nq_k_c\n");
 
-                for (i = index_start; i < index_end; i++){
-                    printf("%8.2f  ", q_k[i]);
-                }
-                printf("\n\n");
+            //     for (i = index_start; i < index_end; i++){
+            //         printf("%8.2f  ", q_k[i]);
+            //     }
+            //     printf("\n\n");
 
             // fill vectors
             for (i = index_start; i < index_end; i++) 
@@ -731,12 +771,12 @@ int main(int argc, char *argv[])
                 r_k_1[i] = r_k[i];
                     
             }
-            printf("\n\nr_k_1_c\n");
+            // printf("\n\nr_k_1_c\n");
 
-                for (i = index_start; i < index_end; i++){
-                    printf("%8.2f  ", r_k_1[i]);
-                }
-                printf("\n\n");
+            //     for (i = index_start; i < index_end; i++){
+            //         printf("%8.2f  ", r_k_1[i]);
+            //     }
+            //     printf("\n\n");
         
 
             // send back the first index first without blocking, to the master
