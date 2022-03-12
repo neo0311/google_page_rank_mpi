@@ -5,23 +5,20 @@
 #include<stdio.h>
 #include<mpi.h>
 #include<cmath>
-#define NUM_PAGES 6
-#define M_C_TAG 1 //tag for messages sent from master to childs
-#define C_M_TAG 4 //tag for messages sent from childs to master
-#define ITERR 30
-void printArray(double mat[][NUM_PAGES], int rows); //print the content of output matrix [C];
+
+
+#define NUM_PAGES 6 // number of pages, also the matrix size
+#define ITERR 30 // #iterations for power iteration
 
 int rank; //process rank
 int size; //number of processes
 int i, j, k; //helper variables
 int m = 0;
 int n = 0;
-//double L[NUM_PAGES][NUM_PAGES] = {1}; 
 double L[NUM_PAGES][NUM_PAGES] = {0}; //temp
 double Q[NUM_PAGES][NUM_PAGES] = {0};
 double e_d[NUM_PAGES][NUM_PAGES] = {0};
 double P[NUM_PAGES][NUM_PAGES] = {0};
-//double r_k_1[NUM_PAGES] = {1 / double(NUM_PAGES)};
 double r_k_1[NUM_PAGES] = {0};
 double r_k[NUM_PAGES] = {0};
 double q_k[NUM_PAGES] = {0};
@@ -35,32 +32,35 @@ double e[NUM_PAGES] = {0};
 double d[NUM_PAGES] = {0};
 double start_time; //hold start time
 double end_time; // hold end time
-int index_start; //first index of the number of rows of [A] allocated to a child
-int index_end; //last index of the number of rows of [A] allocated to a child
-int chunk_size; //chunk_size of the number of rows of [A] allocated to a child
 int const rnd_zeros = ((NUM_PAGES*NUM_PAGES)*0.25)/NUM_PAGES; //number of positions in each row to be replaced by 0.
-int index_arry[rnd_zeros]; 
-int rnd_filled = 0;
+
 MPI_Status status;   // store status of a MPI_Recv
 MPI_Request request; //capture request of a MPI_Isend
 
 int main(int argc, char *argv[])
 {
-    srand(17);
+    srand(17); // set random seed
 
-    MPI_Init(&argc, &argv);               // initialize MPI operations
+    MPI_Init(&argc, &argv);               //initialize MPI operations
     MPI_Comm_rank(MPI_COMM_WORLD, &rank); //get the rank
     MPI_Comm_size(MPI_COMM_WORLD, &size); //get number of processes
 
-    //size = 4;
-    int remainder = NUM_PAGES % size;
+    // remaining portion after dividing the matrix dims equally for processes
+    int remainder = NUM_PAGES % size; 
     int rows_to_send = (NUM_PAGES / size);
-    int local_rows = (NUM_PAGES / size);
-    int testing;
-    if (rank < remainder)
-    {
-        local_rows++;
+
+    // size of local buffer (eg. no. of rows or columns to send per process)
+    int local_bfr_size = (NUM_PAGES / size);
+    // if (rank < remainder)
+    // {
+    //     local_bfr_size++;
+    // }
+    if (rank==size-1){
+
+        local_bfr_size += remainder; // add remainder to last chunk
     }
+    int testing; // to decide to test with given web or do random 
+
     int count = NUM_PAGES / size; // count of each chunk
 
     int counts_M[size] = {}; // to store chunk sizes
@@ -112,7 +112,8 @@ int main(int argc, char *argv[])
         }
 
         printf("\nTest with given web? Then enter 1, else 0: ");
-        std::cin >> testing;
+        scanf("%d", &testing);
+        //std::cin >> testing;
         // fill dense matrix based on web
         if (testing ==1){
         L[0][1] = 1;
@@ -139,18 +140,18 @@ int main(int argc, char *argv[])
     MPI_Bcast(&testing, 1, MPI_INT, 0, MPI_COMM_WORLD);
     
 
-    double local_data_M[local_rows*NUM_PAGES] = {};
-    double local_data_v[local_rows] = {};
-    double local_data_v_r_k[local_rows] = {};
-    double local_data_v_r_k_1[local_rows] = {};
-    double local_data_v_temp[local_rows] = {};
-    double local_data_v_q_k[local_rows] = {};
+    double local_data_M[local_bfr_size*NUM_PAGES] = {};
+    double local_data_v[local_bfr_size] = {};
+    double local_data_v_r_k[local_bfr_size] = {};
+    double local_data_v_r_k_1[local_bfr_size] = {};
+    double local_data_v_temp[local_bfr_size] = {};
+    double local_data_v_q_k[local_bfr_size] = {};
 
     MPI_Scatterv(&L, counts_M, indices_M, MPI_DOUBLE,
-                &local_data_M, local_rows * NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+                &local_data_M, local_bfr_size * NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     
 
-    // for (j = 0; j < local_rows*NUM_PAGES; j++){
+    // for (j = 0; j < local_bfr_size*NUM_PAGES; j++){
     //     local_data_M[j]+=1;
 
     //     }
@@ -186,9 +187,9 @@ int main(int argc, char *argv[])
         row_R = (NUM_PAGES/size)*rank;
     }
     if (testing == 0){
-        for (i = 0; i < local_rows * NUM_PAGES; i++){
+        for (i = 0; i < local_bfr_size * NUM_PAGES; i++){
 
-            if (((i ) % NUM_PAGES) == 0 && (i!=0))
+            if ((i % NUM_PAGES) == 0 && (i!=0))
             {
                 row_R += 1;
                 col_R = 0;
@@ -213,29 +214,29 @@ int main(int argc, char *argv[])
             row_R = (NUM_PAGES/size)*rank;
         }
 
-        for (i = 0; i < local_rows * NUM_PAGES; i++)
+        int matrix_index = 0;
+        for (i = 0; i < local_bfr_size * NUM_PAGES; i++)
         {
-                    if (((i ) % NUM_PAGES) == 0 && (i!=0))
+                    if ((i % NUM_PAGES) == 0 && (i!=0))
                     {
                         row_R += 1;
                         col_R = 0;
+                        matrix_index += 1;
                     }
-                                
 
-                            
-                    // }
-                    if (((i ) % NUM_PAGES) == 0){
+                    if ((i % NUM_PAGES) == 0){
                         for (j = 0; j < rnd_zeros;)
                         {
 
-                            index = rand() % ((NUM_PAGES) - 1);
+                            index = rand() % ((NUM_PAGES) -1);
                             if (index != row_R)
                             {
 
-                                local_data_M[i + index] = 0;
+                                local_data_M[matrix_index*NUM_PAGES + index] = 0;
                                 j++;
                             }
-                            //printf("\nrank: %d,index: %d, i: %d, row_R; %d, i+index: %d, L: %8.2f\n", rank, index, i, row_R, i+index, local_data_M[i + index]);
+                            //printf("\nr:%d, index:%d, (%d,%d)\n", rank, index, row_R, col_R);
+                            // printf("\nrank: %d,index: %d, i: %d, row_R; %d, i+index: %d, L: %8.2f\n", rank, index, i, row_R, i+index, local_data_M[i + index]);
                         }
                         //printf("\ni: %d, index: %d, local_data: %f\n", (i+index),index, local_data_M[i + index]);
                     }
@@ -243,7 +244,7 @@ int main(int argc, char *argv[])
                     col_R += 1;
                 }
 
-        MPI_Gatherv(local_data_M, local_rows * NUM_PAGES, MPI_DOUBLE, L, counts_M, indices_M, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Gatherv(local_data_M, local_bfr_size * NUM_PAGES, MPI_DOUBLE, L, counts_M, indices_M, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     }
     if (rank == 0){
 
@@ -256,7 +257,7 @@ int main(int argc, char *argv[])
     }
 
     MPI_Scatterv(&r, counts_v, indices_v, MPI_DOUBLE,
-                &local_data_v, local_rows, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+                &local_data_v, local_bfr_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     if (rank == 0){
 
@@ -265,12 +266,12 @@ int main(int argc, char *argv[])
             printf("%8.2f  ", r[i]);
         }        
     }
-    for (i = 0; i < local_rows; i++) {
+    for (i = 0; i < local_bfr_size; i++) {
             local_data_v[i]=1/double(NUM_PAGES);
         }   
 
-    MPI_Gatherv(local_data_v, local_rows, MPI_DOUBLE, r, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    MPI_Gatherv(local_data_v, local_rows, MPI_DOUBLE, r_k_1, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Gatherv(local_data_v, local_bfr_size, MPI_DOUBLE, r, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Gatherv(local_data_v, local_bfr_size, MPI_DOUBLE, r_k_1, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
 
     if (rank == 0){
@@ -290,12 +291,12 @@ int main(int argc, char *argv[])
     // indices_M_C[0] = 0;
     // indices_M_C[1] = 3;
 
-    double local_data_M_C[NUM_PAGES* local_rows] = {};
-    local_data_v[local_rows]= {};
+    double local_data_M_C[NUM_PAGES* local_bfr_size] = {};
+    local_data_v[local_bfr_size]= {};
     MPI_Scatterv(&L, counts_v, indices_v, MPI_coltype,
-                 &local_data_M_C[0], NUM_PAGES * local_rows, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+                 &local_data_M_C[0], NUM_PAGES * local_bfr_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     MPI_Scatterv(&nLinks, counts_v, indices_v, MPI_DOUBLE,
-                &local_data_v, local_rows, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+                &local_data_v, local_bfr_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     int row = 0;
     int col = 0;
@@ -308,9 +309,9 @@ int main(int argc, char *argv[])
     }
 
     int vector_index = 0;
-    for (int i = 0; i <NUM_PAGES*local_rows; i++){
+    for (int i = 0; i <NUM_PAGES*local_bfr_size; i++){
 
-        if (((i ) % NUM_PAGES) == 0 && (i!=0)){
+        if ((i % NUM_PAGES) == 0 && (i!=0)){
 
             col += 1;
             row = 0;
@@ -329,7 +330,7 @@ int main(int argc, char *argv[])
 
         row += 1;
     }
-    MPI_Gatherv(local_data_v, local_rows, MPI_DOUBLE, nLinks, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Gatherv(local_data_v, local_bfr_size, MPI_DOUBLE, nLinks, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     
     if (rank == 0){
 
@@ -344,7 +345,7 @@ int main(int argc, char *argv[])
     MPI_Bcast(&nLinks, NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     MPI_Scatterv(&Q, counts_M, indices_M, MPI_DOUBLE,
-                &local_data_M, local_rows * NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+                &local_data_M, local_bfr_size * NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     // Specify starting point of the global array index
     if (rank == 0){
@@ -354,10 +355,10 @@ int main(int argc, char *argv[])
         m = (NUM_PAGES/size)*rank;
     }
 
-    for (i = 0; i < local_rows * NUM_PAGES; i++)
+    for (i = 0; i < local_bfr_size * NUM_PAGES; i++)
     {
 
-        if (((i ) % NUM_PAGES) == 0 && (i!=0))
+        if ((i % NUM_PAGES) == 0 && (i!=0))
         {
             m+=1;
             n = 0;
@@ -372,7 +373,7 @@ int main(int argc, char *argv[])
         n++;
     }
 
-    MPI_Gatherv(local_data_M, local_rows * NUM_PAGES, MPI_DOUBLE, Q, counts_M, indices_M, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Gatherv(local_data_M, local_bfr_size * NUM_PAGES, MPI_DOUBLE, Q, counts_M, indices_M, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     if (rank == 0){
 
@@ -391,11 +392,11 @@ int main(int argc, char *argv[])
     // indices_M_C[0] = 0;
     // indices_M_C[1] = 3;
 
-    local_data_M_C[NUM_PAGES* local_rows] = {};
+    local_data_M_C[NUM_PAGES* local_bfr_size] = {};
     MPI_Scatterv(&Q, counts_v, indices_v, MPI_coltype,
-                &local_data_M_C[0], NUM_PAGES*local_rows, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+                &local_data_M_C[0], NUM_PAGES*local_bfr_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     MPI_Scatterv(&d, counts_v, indices_v, MPI_DOUBLE,
-                &local_data_v, local_rows, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+                &local_data_v, local_bfr_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     if (rank == 0){
         n = 0;
@@ -404,7 +405,7 @@ int main(int argc, char *argv[])
     }
     bool only_zeros = true;
     m = 0;
-    local_data_v[local_rows] = {};
+    local_data_v[local_bfr_size] = {};
 
     row = 0;
     col = 0;
@@ -418,14 +419,14 @@ int main(int argc, char *argv[])
     vector_index = 0;
 
     // fill local_data_v (here d with 1)
-    for (int i = 0; i < local_rows; i++){
+    for (int i = 0; i < local_bfr_size; i++){
 
         local_data_v[i] = 1;
     }
         printf("\nQ after scatter column, rank: %d\n", rank);
-    for (int i = 0; i <NUM_PAGES*local_rows; i++){
+    for (int i = 0; i <NUM_PAGES*local_bfr_size; i++){
 
-        if (((i ) % NUM_PAGES) == 0 && (i!=0)){
+        if ((i % NUM_PAGES) == 0 && (i!=0)){
 
             col += 1;
             row = 0;
@@ -450,13 +451,13 @@ int main(int argc, char *argv[])
 
 
     // printf("\nd after scatter column, rank: %d\n", rank);
-    // for (int i = 0; i <local_rows; i++){
+    // for (int i = 0; i <local_bfr_size; i++){
 
     //     printf("%8.2f ", local_data_v[i]);
     //     }
     // printf("\n");
 
-    MPI_Gatherv(local_data_v, local_rows, MPI_DOUBLE, d, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Gatherv(local_data_v, local_bfr_size, MPI_DOUBLE, d, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     if (rank == 0){
 
@@ -469,7 +470,7 @@ int main(int argc, char *argv[])
     MPI_Bcast(&d, NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     MPI_Scatterv(&e_d, counts_M, indices_M, MPI_DOUBLE,
-                 &local_data_M, local_rows * NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+                 &local_data_M, local_bfr_size * NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     
     col_R = 0;
@@ -480,9 +481,9 @@ int main(int argc, char *argv[])
     }
     
 
-    for (int i = 0; i <NUM_PAGES*local_rows; i++){
+    for (int i = 0; i <NUM_PAGES*local_bfr_size; i++){
 
-        if (((i ) % NUM_PAGES) == 0 && (i!=0)){
+        if ((i % NUM_PAGES) == 0 && (i!=0)){
 
             row_R += 1;
             col_R = 0;
@@ -494,7 +495,7 @@ int main(int argc, char *argv[])
         col_R += 1;
     }
 
-    MPI_Gatherv(local_data_M, local_rows * NUM_PAGES, MPI_DOUBLE, e_d, counts_M, indices_M, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Gatherv(local_data_M, local_bfr_size * NUM_PAGES, MPI_DOUBLE, e_d, counts_M, indices_M, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     if (rank == 0){
 
@@ -510,7 +511,7 @@ int main(int argc, char *argv[])
     MPI_Bcast(&Q, NUM_PAGES*NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     MPI_Scatterv(&P, counts_M, indices_M, MPI_DOUBLE,
-                 &local_data_M, local_rows * NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+                 &local_data_M, local_bfr_size * NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
 
     if (rank == 0){
@@ -519,10 +520,10 @@ int main(int argc, char *argv[])
         row_R = (NUM_PAGES/size)*rank;
     }
     col_R = 0;
-    for (int i = 0; i < NUM_PAGES * local_rows; i++)
+    for (int i = 0; i < NUM_PAGES * local_bfr_size; i++)
     {
 
-        if (((i ) % NUM_PAGES) == 0 && (i!=0)){
+        if ((i % NUM_PAGES) == 0 && (i!=0)){
 
             row_R += 1;
             col_R = 0;
@@ -532,7 +533,7 @@ int main(int argc, char *argv[])
         col_R += 1;
     }
 
-    MPI_Gatherv(local_data_M, local_rows * NUM_PAGES, MPI_DOUBLE, P, counts_M, indices_M, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Gatherv(local_data_M, local_bfr_size * NUM_PAGES, MPI_DOUBLE, P, counts_M, indices_M, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     if (rank == 0){
 
@@ -557,13 +558,13 @@ int main(int argc, char *argv[])
 
         //q_k vector
 
-        local_data_M[local_rows*NUM_PAGES] = {};
-        local_data_v[local_rows] = {};
+        local_data_M[local_bfr_size*NUM_PAGES] = {};
+        local_data_v[local_bfr_size] = {};
         MPI_Scatterv(&P, counts_M, indices_M, MPI_DOUBLE,
-                        &local_data_M, local_rows * NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+                        &local_data_M, local_bfr_size * NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         MPI_Bcast(&r_k_1, NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         MPI_Scatterv(&q_k, counts_v, indices_v, MPI_DOUBLE,
-                &local_data_v, local_rows, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+                &local_data_v, local_bfr_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
         col_R = 0;
         if (rank == 0){
@@ -575,10 +576,10 @@ int main(int argc, char *argv[])
         sum = 0;
         vector_index = 0;
         printf("\n");
-        for (int i = 0; i < NUM_PAGES * local_rows; i++)
+        for (int i = 0; i < NUM_PAGES * local_bfr_size; i++)
         {
 
-            if (((i ) % NUM_PAGES) == 0 && (i!=0)){
+            if ((i % NUM_PAGES) == 0 && (i!=0)){
 
                 row_R += 1;
                 col_R = 0;
@@ -592,7 +593,7 @@ int main(int argc, char *argv[])
             //printf("[r:%d, ldv:%f, ldM:%f, r_k_1:%f, (%d,%d), vi:%d]", rank, local_data_v[vector_index], local_data_M[i], r_k_1[col_R], row_R,col_R, vector_index);
             col_R += 1;
         }
-        MPI_Gatherv(local_data_v, local_rows, MPI_DOUBLE, q_k, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Gatherv(local_data_v, local_bfr_size, MPI_DOUBLE, q_k, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         
         //MPI_Bcast(&q_k, NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         
@@ -616,16 +617,16 @@ int main(int argc, char *argv[])
         
 
         MPI_Scatterv(&r_k, counts_v, indices_v, MPI_DOUBLE,
-                &local_data_v_r_k, local_rows, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+                &local_data_v_r_k, local_bfr_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         MPI_Scatterv(&r_k_1, counts_v, indices_v, MPI_DOUBLE,
-                &local_data_v_r_k_1, local_rows, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+                &local_data_v_r_k_1, local_bfr_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         MPI_Scatterv(&temp, counts_v, indices_v, MPI_DOUBLE,
-                &local_data_v_temp, local_rows, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+                &local_data_v_temp, local_bfr_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         MPI_Scatterv(&q_k, counts_v, indices_v, MPI_DOUBLE,
-                &local_data_v_q_k, local_rows, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+                &local_data_v_q_k, local_bfr_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
         printf("\n");
-        for (int i = 0; i < local_rows; i++)
+        for (int i = 0; i < local_bfr_size; i++)
         {
 
             local_data_v_r_k[i] = local_data_v_q_k[i]/q_k_norm;
@@ -635,10 +636,10 @@ int main(int argc, char *argv[])
             //printf("\nr: %d, r_k: %f", rank, local_data_v_r_k[i]);
         }
 
-        MPI_Gatherv(local_data_v_q_k, local_rows, MPI_DOUBLE, q_k, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-        MPI_Gatherv(local_data_v_temp, local_rows, MPI_DOUBLE, temp, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-        MPI_Gatherv(local_data_v_r_k_1, local_rows, MPI_DOUBLE, r_k_1, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-        MPI_Gatherv(local_data_v_r_k, local_rows, MPI_DOUBLE, r_k, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Gatherv(local_data_v_q_k, local_bfr_size, MPI_DOUBLE, q_k, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Gatherv(local_data_v_temp, local_bfr_size, MPI_DOUBLE, temp, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Gatherv(local_data_v_r_k_1, local_bfr_size, MPI_DOUBLE, r_k_1, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Gatherv(local_data_v_r_k, local_bfr_size, MPI_DOUBLE, r_k, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
 
         // MPI_Bcast(&temp, NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
