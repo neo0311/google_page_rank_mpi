@@ -8,7 +8,7 @@
 #define NUM_PAGES 6
 #define M_C_TAG 1 //tag for messages sent from master to childs
 #define C_M_TAG 4 //tag for messages sent from childs to master
-#define ITERR 1
+#define ITERR 30
 void printArray(double mat[][NUM_PAGES], int rows); //print the content of output matrix [C];
 
 int rank; //process rank
@@ -141,6 +141,10 @@ int main(int argc, char *argv[])
 
     double local_data_M[local_rows*NUM_PAGES] = {};
     double local_data_v[local_rows] = {};
+    double local_data_v_r_k[local_rows] = {};
+    double local_data_v_r_k_1[local_rows] = {};
+    double local_data_v_temp[local_rows] = {};
+    double local_data_v_q_k[local_rows] = {};
 
     MPI_Scatterv(&L, counts_M, indices_M, MPI_DOUBLE,
                 &local_data_M, local_rows * NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -543,398 +547,147 @@ int main(int argc, char *argv[])
     int flag_ = 1;
     int stop = 0;
 
-    if (rank == 0){
+    //if (rank == 0){
 
 
 
-        while (stop!=1){
+    while (stop!=1){
 
-            printf("\nStarted: %d", v);
+        printf("\nStarted: %d", v);
 
-            //q_k vector
-            //Send assembled P matrix to find number of links
-            for (i = 1; i < size; i++) {//for each child other than the master
-                chunk_size = (NUM_PAGES / (size - 1)); // calculate chunk_size without master
-                index_start = (i - 1) * chunk_size;
-                if (((i + 1) == size) && ((NUM_PAGES % (size - 1)) != 0)) {//if rows of [A] cannot be equally divided among childs
-                    index_end = NUM_PAGES; //last child gets all the remaining rows
-                } else {
-                    index_end = index_start + chunk_size; //rows of [A] are equally divisable among childs
-                }
-                //send the first index first without blocking, to the intended child
-                MPI_Isend(&index_start, 1, MPI_INT, i, M_C_TAG+21, MPI_COMM_WORLD, &request);
-                //next send the last index without blocking, to the intended child
-                MPI_Isend(&index_end, 1, MPI_INT, i, M_C_TAG + 22, MPI_COMM_WORLD, &request);
-                //finally send the allocated column chunk_size of [A] without blocking, to the intended child
-                MPI_Isend(&P[index_start][0], (index_end - index_start) * NUM_PAGES, MPI_DOUBLE, i, M_C_TAG + 23, MPI_COMM_WORLD, &request);
-                MPI_Isend(&q_k, NUM_PAGES, MPI_DOUBLE, i, M_C_TAG + 24, MPI_COMM_WORLD, &request);
-                MPI_Isend(&r_k_1, NUM_PAGES, MPI_DOUBLE, i, M_C_TAG + 96, MPI_COMM_WORLD, &request);
+        //q_k vector
 
+        local_data_M[local_rows*NUM_PAGES] = {};
+        local_data_v[local_rows] = {};
+        MPI_Scatterv(&P, counts_M, indices_M, MPI_DOUBLE,
+                        &local_data_M, local_rows * NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&r_k_1, NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Scatterv(&q_k, counts_v, indices_v, MPI_DOUBLE,
+                &local_data_v, local_rows, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-            
+        col_R = 0;
+        if (rank == 0){
+            row_R = 0;
+        }else{
+            row_R = (NUM_PAGES/size)*rank;
+        }
+        
+        sum = 0;
+        vector_index = 0;
+        printf("\n");
+        for (int i = 0; i < NUM_PAGES * local_rows; i++)
+        {
+
+            if (((i ) % NUM_PAGES) == 0 && (i!=0)){
+
+                row_R += 1;
+                col_R = 0;
+                sum = 0;
+                vector_index += 1;
+
+                //printf("\n");
             }
 
-            // Receive assembled q_k vector
-            for (i = 1; i < size; i++)
-            {   
-                //receive first index from a child
-                MPI_Recv(&index_start, 1, MPI_INT, i, C_M_TAG + 21, MPI_COMM_WORLD, &status);
-                //receive last index from a child
-                MPI_Recv(&index_end, 1, MPI_INT, i, C_M_TAG + 22, MPI_COMM_WORLD, &status);
-                // untill all childs have handed back the processed data
-                MPI_Recv(&q_k, NUM_PAGES, MPI_DOUBLE, i, C_M_TAG + 24, MPI_COMM_WORLD, &status);
-            }
+            local_data_v[vector_index] += local_data_M[i]*r_k_1[col_R];
+            //printf("[r:%d, ldv:%f, ldM:%f, r_k_1:%f, (%d,%d), vi:%d]", rank, local_data_v[vector_index], local_data_M[i], r_k_1[col_R], row_R,col_R, vector_index);
+            col_R += 1;
+        }
+        MPI_Gatherv(local_data_v, local_rows, MPI_DOUBLE, q_k, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        
+        //MPI_Bcast(&q_k, NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        
+        if (rank == 0){
 
-            q_k_norm = 0;
-            // Calculate L1norm
-            for (i = 0; i < NUM_PAGES; i++)
-            {
-                q_k_norm += fabs(q_k[i]);
-            }
-
-            // printf("\n\nq_k_norm_m\n");
-
-            // for (i = 0; i < NUM_PAGES; i++){
-            //     printf("%8.2f  ",q_k_norm);
-            // }
-            // printf("\n\n");
-
-            printf("\n\nq_k_m before send\n");
-
-            for (i = 0; i < NUM_PAGES; i++){
-                printf("%8.2f  ", q_k[i]);
-            }
-
-            // r_k vector
-            // Send assembled vectors
-            for (i = 1; i < size; i++) {//for each child other than the master
-                chunk_size = (NUM_PAGES / (size - 1)); // calculate chunk_size without master
-                index_start = (i - 1) * chunk_size;
-                if (((i + 1) == size) && ((NUM_PAGES % (size - 1)) != 0)) {//if rows of [A] cannot be equally divided among childs
-                    index_end = NUM_PAGES; //last child gets all the remaining rows
-                } else {
-                    index_end = index_start + chunk_size; //rows of [A] are equally divisable among childs
-                }
-                //send the first index first without blocking, to the intended child
-                MPI_Isend(&index_start, 1, MPI_INT, i, M_C_TAG+25, MPI_COMM_WORLD, &request);
-                //next send the last index without blocking, to the intended child
-                MPI_Isend(&index_end, 1, MPI_INT, i, M_C_TAG + 26, MPI_COMM_WORLD, &request);
-                //finally send the allocated column chunk_size of [A] without blocking, to the intended child
-                MPI_Isend(&r_k[index_start], (index_end - index_start), MPI_DOUBLE, i, M_C_TAG + 27, MPI_COMM_WORLD, &request);
-                MPI_Isend(&r_k_1[index_start], (index_end - index_start), MPI_DOUBLE, i, M_C_TAG + 28, MPI_COMM_WORLD, &request);
-                MPI_Isend(&temp[index_start], (index_end - index_start), MPI_DOUBLE, i, M_C_TAG + 29, MPI_COMM_WORLD, &request);
-                MPI_Isend(&q_k_norm, 1, MPI_DOUBLE, i, M_C_TAG + 97, MPI_COMM_WORLD, &request);
-                MPI_Isend(&q_k[index_start], (index_end - index_start), MPI_DOUBLE, i, M_C_TAG + 98, MPI_COMM_WORLD, &request);
-
-            
-            }
-
-            // Receive assembled q_k vector
-            for (i = 1; i < size; i++)
-            {   
-                //receive first index from a child
-                MPI_Recv(&index_start, 1, MPI_INT, i, C_M_TAG + 25, MPI_COMM_WORLD, &status);
-                //receive last index from a child
-                MPI_Recv(&index_end, 1, MPI_INT, i, C_M_TAG + 26, MPI_COMM_WORLD, &status);
-                // untill all childs have handed back the processed data
-                MPI_Recv(&r_k[index_start], (index_end - index_start), MPI_DOUBLE, i, C_M_TAG + 27, MPI_COMM_WORLD, &status);
-                MPI_Recv(&r_k_1[index_start], (index_end - index_start), MPI_DOUBLE, i, C_M_TAG + 28, MPI_COMM_WORLD, &status);
-                MPI_Recv(&temp[index_start], (index_end - index_start), MPI_DOUBLE, i, C_M_TAG + 29, MPI_COMM_WORLD, &status);
-            }
-
-            // printf("\n\nq_k_m after receive\n");
-
-            // for (i = 0; i < NUM_PAGES; i++){
-            //     printf("%8.2f  ", q_k[i]);
-            // }
-            // printf("\n\n");
-            printf("\nFinished: %d", v);
-            v++;
-            if (v>=ITERR){
-                stop = 1;
-            }
-            MPI_Bcast(&stop, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
+        printf("\n\nq_k after Gather\n");
+        for (i = 0; i < NUM_PAGES; i++) {
+            printf("%8.2f  ", q_k[i]);
+        }     
+        q_k_norm = 0;
+        // Calculate L1norm
+        for (i = 0; i < NUM_PAGES; i++)
+        {
+            q_k_norm += fabs(q_k[i]);
+        }
+        printf("\nq_k norm: %f\n", q_k_norm);
 
         }
 
+        MPI_Bcast(&q_k_norm, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         
-        sum= 0;
-        printf("\n\nr_k after Gather\n");
+
+        MPI_Scatterv(&r_k, counts_v, indices_v, MPI_DOUBLE,
+                &local_data_v_r_k, local_rows, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Scatterv(&r_k_1, counts_v, indices_v, MPI_DOUBLE,
+                &local_data_v_r_k_1, local_rows, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Scatterv(&temp, counts_v, indices_v, MPI_DOUBLE,
+                &local_data_v_temp, local_rows, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Scatterv(&q_k, counts_v, indices_v, MPI_DOUBLE,
+                &local_data_v_q_k, local_rows, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+        printf("\n");
+        for (int i = 0; i < local_rows; i++)
+        {
+
+            local_data_v_r_k[i] = local_data_v_q_k[i]/q_k_norm;
+            local_data_v_temp[i] = local_data_v_r_k_1[i];
+            local_data_v_r_k_1[i] = local_data_v_r_k[i];
+
+            //printf("\nr: %d, r_k: %f", rank, local_data_v_r_k[i]);
+        }
+
+        MPI_Gatherv(local_data_v_q_k, local_rows, MPI_DOUBLE, q_k, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Gatherv(local_data_v_temp, local_rows, MPI_DOUBLE, temp, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Gatherv(local_data_v_r_k_1, local_rows, MPI_DOUBLE, r_k_1, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Gatherv(local_data_v_r_k, local_rows, MPI_DOUBLE, r_k, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+
+        // MPI_Bcast(&temp, NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        // MPI_Bcast(&r_k, NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        // MPI_Bcast(&r_k_1, NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+
+        if (rank == 0){
+        printf("\n\nr_k after Gather_inside_loop\n");
         for (i = 0; i < NUM_PAGES; i++) {
             sum+=r_k[i];
             printf("%8.2f  ", r_k[i]);
         }   
-        printf("\nSum: %8.2f\n", sum);
-
-    }else{
-         
-
-        while(stop!=1){
-
-            //**************** Asemble the q_k vector****************************************************+
-            //receive first index from the master
-            MPI_Recv(&index_start, 1, MPI_INT, 0, M_C_TAG + 21, MPI_COMM_WORLD, &status);
-            //next receive last index from the master
-            MPI_Recv(&index_end, 1, MPI_INT, 0, M_C_TAG + 22, MPI_COMM_WORLD, &status);
-            //finally receive row chunk_size of [A] to be processed from the master
-            MPI_Recv(&P[index_start][0], (index_end - index_start) * NUM_PAGES, MPI_DOUBLE, 0, M_C_TAG + 23, MPI_COMM_WORLD, &status);
-            MPI_Recv(&q_k, NUM_PAGES, MPI_DOUBLE, 0, M_C_TAG + 24, MPI_COMM_WORLD, &status);
-            MPI_Recv(&r_k_1,  NUM_PAGES, MPI_DOUBLE, 0, M_C_TAG + 96, MPI_COMM_WORLD, &status);
-
-            // printf("\n\nr_k_1_nn: %d\n", v);
-
-            //     for (i = 0; i < NUM_PAGES; i++){
-            //         printf("%8.2f  ", r_k_1[i]);
-            //     }
-            //     printf("\n\n");
-            
-            // printf("\n\nP_c: %d\n", v);
-
-            // for (i = index_start; i < index_end; i++){
-
-            //     printf("\n\n");
-            //     for(j = 0; j < NUM_PAGES; j++){
-
-            //         printf("%8.2f  ", P[i][j]);
-            //     }
-            // }
-            // fill P matrix
-            for (i = index_start; i < index_end; i++){
-
-                sum = 0;
-                for (int j = 0; j < NUM_PAGES; j++)
-                {
-                    sum += P[i][j] * r_k_1[j];
-                    
-
-                }
-                q_k[i] = sum;
-            }
-                
-            // printf("\n\nq_k_c\n");
-
-            //     for (i = 0; i < NUM_PAGES; i++){
-            //         printf("%8.2f  ", q_k[i]);
-            //     }
-            //     printf("\n\n");
-            // send back the first index first without blocking, to the master
-            MPI_Isend(&index_start, 1, MPI_INT, 0, C_M_TAG + 21, MPI_COMM_WORLD, &request);
-            //send the last index next without blocking, to the master
-            MPI_Isend(&index_end, 1, MPI_INT, 0, C_M_TAG + 22, MPI_COMM_WORLD, &request);
-            //finally send the processed chunk_size of data without blocking, to the master
-            MPI_Isend(&q_k, NUM_PAGES, MPI_DOUBLE, 0, C_M_TAG + 24, MPI_COMM_WORLD, &request);
-
-
-            //**************** Asemble the r_k vector****************************************************+
-            //receive first index from the master
-            MPI_Recv(&index_start, 1, MPI_INT, 0, M_C_TAG + 25, MPI_COMM_WORLD, &status);
-            //next receive last index from the master
-            MPI_Recv(&index_end, 1, MPI_INT, 0, M_C_TAG + 26, MPI_COMM_WORLD, &status);
-            //finally receive row chunk_size of [A] to be processed from the master
-            MPI_Recv(&r_k[index_start], (index_end - index_start), MPI_DOUBLE, 0, M_C_TAG + 27, MPI_COMM_WORLD, &status);
-            MPI_Recv(&r_k_1[index_start], (index_end - index_start), MPI_DOUBLE, 0, M_C_TAG + 28, MPI_COMM_WORLD, &status);
-            MPI_Recv(&temp[index_start], (index_end - index_start), MPI_DOUBLE, 0, M_C_TAG + 29, MPI_COMM_WORLD, &status);
-            MPI_Recv(&q_k_norm, 1, MPI_DOUBLE, 0, M_C_TAG + 97, MPI_COMM_WORLD, &status);
-            
-            MPI_Recv(&q_k[index_start], (index_end - index_start), MPI_DOUBLE, 0, M_C_TAG + 98, MPI_COMM_WORLD, &status);
-
-            // printf("\n\nq_k_norm_c\n");
-
-            //     for (i = 0; i < NUM_PAGES; i++){
-            //         printf("%8.2f  ", q_k_norm);
-            //     }
-            //     printf("\n\n");
-            
-            // printf("\n\nq_k_c\n");
-
-            //     for (i = index_start; i < index_end; i++){
-            //         printf("%8.2f  ", q_k[i]);
-            //     }
-            //     printf("\n\n");
-
-            // fill vectors
-            for (i = index_start; i < index_end; i++) 
-            {
-                r_k[i] = q_k[i]/q_k_norm;
-                temp[i] = r_k_1[i];
-                r_k_1[i] = r_k[i];
-                    
-            }
-            // printf("\n\nr_k_1_c\n");
-
-            //     for (i = index_start; i < index_end; i++){
-            //         printf("%8.2f  ", r_k_1[i]);
-            //     }
-            //     printf("\n\n");
-        
-
-            // send back the first index first without blocking, to the master
-            MPI_Isend(&index_start, 1, MPI_INT, 0, C_M_TAG + 25, MPI_COMM_WORLD, &request);
-            //send the last index next without blocking, to the master
-            MPI_Isend(&index_end, 1, MPI_INT, 0, C_M_TAG + 26, MPI_COMM_WORLD, &request);
-            //finally send the processed chunk_size of data without blocking, to the master
-            MPI_Isend(&r_k[index_start], (index_end - index_start), MPI_DOUBLE, 0, C_M_TAG + 27, MPI_COMM_WORLD, &request);
-            MPI_Isend(&r_k_1[index_start], (index_end - index_start), MPI_DOUBLE, 0, C_M_TAG + 28, MPI_COMM_WORLD, &request);
-            MPI_Isend(&temp[index_start], (index_end - index_start), MPI_DOUBLE, 0, C_M_TAG + 29, MPI_COMM_WORLD, &request);
-            MPI_Bcast(&stop, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
+    
         }
-    }
-    //printf("\n");
-    
-    // for (i = 0; i < NUM_PAGES * local_rows; i++)
-    // {
 
-    //     if (((i ) % NUM_PAGES) == 0 && (i!=0))
-    //     {   
-    //         if (only_zeros==true){
-
-                
-    //             local_data_v[n] += 1;
-    //             printf("\n\n\nHere\n\n%d\n%d\n%d\n", m,n, local_data_v[n]);
-    //         }
-    //         n+=1;
-    //         m = 0;
-    //         only_zeros = true;
-    //     }
-
-    //     if (local_data_M_C[m] != 0)
-    //         {
-    //             only_zeros = false;
-    //         }
-    //     m++;
-    // }
-
-    // printf("\n\nd after Scatterv\n");
-
-    // for (i = 0; i < local_rows; i++){
-
-    //     printf("%8.2f ", local_data_v[i]);
-    // }
-    // printf("\n");
-
-    // if (rank == 0){
-    //     j = 0;
-    //     printf("\n\nQ after Scatterv\n");
-    //     for (i = 0; i < NUM_PAGES*local_rows; i++) {
-            
-            
-    //            if ((i ) % NUM_PAGES == 0)
-    //             {
-    //                 printf("\n\n");
-    //                 j = 0;
-    //             }
-
-    //             printf("%8.2f  ", local_data_M_C[i]);
-    //     }        
-    // }
-    
-
-    end_time = MPI_Wtime();
-    printf("\nRunning Time = %f\n\n", end_time - start_time);
-        
-    
-    //printf("Process %d received elements: ", rank);
-    //printf("\n\nlocalL\n");
-    // for (i = 0; i < local_rows; i++) {
-    //     printf("\n\n");
-    //     for (j = 0; j < NUM_PAGES; j++)
-    //         printf("%8.2f  ", local_data_M[j]);
-    // }
-    // for (j = 0; j < local_rows*NUM_PAGES; j++){
-    //     printf("%8.2f  ", local_data_M[j]);
-    //     if((j+1)%6 == 0){
-    //         printf("\n");
-    //     }
-    // }
-
-    
-    //printArray(local_data_M, local_rows);
-
-    //MPI_Bcast(&nLinks, NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    /* work done by childs*/
-
-    MPI_Finalize(); //finalize MPI operations
-
-    return 0;
-}
-
-void printArray(double mat[][NUM_PAGES] ,int rows)
-{   
-    // printf("\n\nL\n");
-    // for (i = 0; i < NUM_PAGES; i++) {
-    //     printf("\n\n");
-    //     for (j = 0; j < NUM_PAGES; j++)
-    //         printf("%8.2f  ", L[i][j]);
-    // }
-
-    // printf("\n\nlocalL\n");
-    // for (i = 0; i < rows; i++) {
-    //     printf("\n\n");
-    //     for (j = 0; j < NUM_PAGES; j++)
-    //         printf("%8.2f  ", mat[i][j]);
-    // }
-
-    // for (i = 0; i < NUM_PAGES; i++){
-    //     printf("%8.2f  ", mat[i]);
-    // }
-
-        // printf("\n\nnLinks\n");
-
-        // for (i = 0; i < NUM_PAGES; i++){
-        //     printf("%8.2f  ", nLinks[i]);
-        // }
-        // printf("\nQ\n");
-
-        // for (i = 0; i < NUM_PAGES; i++) {
-        //     printf("\n");
-        //     for (j = 0; j < NUM_PAGES; j++)
-        //         printf("%8.2f  ", Q[i][j]);
-        // }
-
-        // printf("\n\nd\n");
-
-        // for (i = 0; i < NUM_PAGES; i++){
-        //     printf("%8.2f  ", d[i]);
-        // }
-        // printf("\ne_d\n");
-
-        // for (i = 0; i < NUM_PAGES; i++) {
-        //     printf("\n");
-        //     for (j = 0; j < NUM_PAGES; j++)
-        //         printf("%8.2f  ", e_d[i][j]);
-        // }
-        //  printf("\nP\n");
-
-        // for (i = 0; i < NUM_PAGES; i++) {
-        //     printf("\n");
-        //     for (j = 0; j < NUM_PAGES; j++)
-        //         printf("%8.2f  ", P[i][j]);
-        // }
-        // printf("\n\nr_k\n");
-
-        // for (i = 0; i < NUM_PAGES; i++){
-        //     printf("%8.2f  ", r_k[i]);
-        // }
-        // printf("\n\n");
-
-        // printf("\n\nr_k_1\n");
-
-        // for (i = 0; i < NUM_PAGES; i++){
-        //     printf("%8.2f  ", r_k_1[i]);
-        // }
-        // printf("\n\n");
-        // printf("\n\nq_k\n");
+        // printf("\n\nq_k_m after receive\n");
 
         // for (i = 0; i < NUM_PAGES; i++){
         //     printf("%8.2f  ", q_k[i]);
         // }
         // printf("\n\n");
-        // printf("\n\nr\n");
+        printf("\nFinished: %d", v);
+        v++;
+        if (v>=ITERR){
+            stop = 1;
+        }
+        MPI_Bcast(&stop, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-        // for (i = 0; i < NUM_PAGES; i++){
-        //     printf("%8.2f  ", r[i]);
-        // }
-        // printf("\n\n");
-}   
+
+    }
+
+    if (rank == 0){
+
+    
+    sum= 0;
+    printf("\n\nr_k after Gather\n");
+    for (i = 0; i < NUM_PAGES; i++) {
+        sum+=r_k[i];
+        printf("%8.2f  ", r_k[i]);
+    }   
+    printf("\nSum: %8.2f\n", sum);
+    }
+
+    end_time = MPI_Wtime();
+    printf("\nRunning Time = %f\n\n", end_time - start_time);
+        
+    MPI_Finalize(); //finalize MPI operations
+
+    return 0;
+}
+
