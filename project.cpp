@@ -34,6 +34,18 @@ double L1norm(vector<double> v, int n)
 
 }
 
+double L2norm(vector<double> v, int n)
+{
+    double norm = 0;
+    for (int i = 0; i < n; i++)
+    {
+        norm += v[i]*v[i];
+    }
+
+    return norm;
+
+}
+
 int main()
 {
     srand(17);
@@ -251,6 +263,10 @@ int main()
     int k = 1;
 
     double q_k_norm = 0;
+    double r_k_norm = 0;
+    double dot_prodct = 0;
+    double lambda_max = 0;
+
 
      
     while (k<30){
@@ -285,25 +301,45 @@ int main()
 
         }
 
-        printf("\n\nr_k\n");
-        for (int i = 0; i < n; i++){
-            printf("%8.2f  ", double(r_k[i]));
-        }
+        // printf("\n\nr_k\n");
+        // for (int i = 0; i < n; i++){
+        //     printf("%8.2f  ", double(r_k[i]));
+        // }
         k += 1;
+
+        
+
 
     //} while ((fabs(temp[5] - r_k_1[5]) < 0.0000001) && (k<30));
     } 
+    temp = matVec(P, r_k, n);
+    r_k_norm = L2norm(r_k, n);
 
+    for (int i = 0; i < n; i++){
 
+        dot_prodct+= r_k[i]*temp[i];
 
-    cout << "iterations: " << k << endl;
+    }
+
+    lambda_max = dot_prodct / r_k_norm;
+
+    std::cout << "iterations: " << k << endl;
     double r_sum = 0;
     for (int i = 0; i < n; i++)
     {
         r_sum += double(r_k[i]);
 
     }
-    cout << "r_sum: " << r_sum << endl;
+
+    printf("\n\nr_k\n");
+    for (int i = 0; i < n; i++){
+        printf("%8.2f  ", double(r_k[i]));
+    }
+    k += 1;
+
+    std::cout << "r_sum: " << r_sum << endl;
+    std::cout << "\nlambda_max: " << lambda_max << endl;
+
 
     // for (int i = 0; i < n; i++)
     // {

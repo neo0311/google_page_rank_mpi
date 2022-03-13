@@ -23,7 +23,7 @@ MPI_Request request; //capture request of a MPI_Isend
 int main(int argc, char *argv[])
 {   
     start_time = MPI_Wtime();
-    srand(17); // set random seed
+    //srand(17); // set random seed
 
     MPI_Init(&argc, &argv);               //initialize MPI operations
     MPI_Comm_rank(MPI_COMM_WORLD, &rank); //get the rank
@@ -83,6 +83,8 @@ int main(int argc, char *argv[])
     double r_k[NUM_PAGES] = {0};
     double q_k[NUM_PAGES] = {0};
     double q_k_norm;
+    double l2_norm = 0.0;
+    double lambda_max = 0.0;
     double temp[NUM_PAGES] = {0};
     double r[NUM_PAGES] = {0};
     double nLinks[NUM_PAGES] = {0};
@@ -138,21 +140,22 @@ int main(int argc, char *argv[])
     /* master initializes work*/
     if (rank == 0) {
 
-        //     printf("\ncounts_M");
-        // for (i = 0; i < size; i++)
-        // {
-        //     printf("%8.2d  ", counts_M[i]);
-        // }
-        // printf("\nindices_M");
-        // for (i = 0; i < size; i++)
-        // {
-        //     printf("%8.2d  ", indices_M[i]);
-        // }
-        
+            printf("\ncounts_M");
+        for (i = 0; i < size; i++)
+        {
+            printf("%8.2d  ", counts_M[i]);
+        }
+        printf("\nindices_M");
+        for (i = 0; i < size; i++)
+        {
+            printf("%8.2d  ", indices_M[i]);
+        }
+
         // ask user input to choose testing or random
         printf("\nTest with given web? Then enter 1, else 0: ");
-        //scanf("%d", &testing);
-        std::cin >> testing;
+        fflush(stdout);
+        scanf("%d", &testing);
+        //std::cin >> testing;
 
         // fill dense matrix based on web
         if (testing ==1){
@@ -262,12 +265,14 @@ int main(int argc, char *argv[])
                         // fills random places in rows with zeros (preset counts).
                         for (j = 0; j < rnd_zeros;)
                         {
+                            srand(row_R); // set seed based on global row index
                             // randomly generate indices to be zeroed out
                             index = rand() % ((NUM_PAGES) -1);
                             if (index != row_R)
                             {
                                 // to calculate correct index in matrix
                                 local_data_M[matrix_index*NUM_PAGES + index] = 0;
+
                                 j++;
                             }
                             //printf("\nr:%d, index:%d, (%d,%d)\n", rank, index, row_R, col_R);
@@ -281,14 +286,16 @@ int main(int argc, char *argv[])
         MPI_Gatherv(local_data_M, local_bfr_size * NUM_PAGES, MPI_DOUBLE, L, counts_M, indices_M, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     }
 
-    if (rank == 0){
+    if (rank == 0)
+    {
 
         printf("\n\nL after Gather\n");
-        for (i = 0; i < NUM_PAGES; i++) {
+        for (i = 0; i < NUM_PAGES; i++)
+        {
             printf("\n\n");
             for (j = 0; j < NUM_PAGES; j++)
                 printf("%8.2f  ", L[i][j]);
-        }        
+        }
     }
 
     if (rank == 0){
@@ -673,9 +680,72 @@ int main(int argc, char *argv[])
         printf("\nSum: %8.2f\n", sum);
     }
 
+    // *********************************************** largest eigenvalue calculation *******************************
+    local_data_M[local_bfr_size*NUM_PAGES] = {};
+    local_data_v_temp[local_bfr_size] = {};
+    temp[NUM_PAGES] = {};
+    MPI_Scatterv(&P, counts_M, indices_M, MPI_DOUBLE,
+                 &local_data_M, local_bfr_size * NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Scatterv(&temp, counts_v, indices_v, MPI_DOUBLE,
+                &local_data_v_temp, local_bfr_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&r_k, NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    col_R = 0;
+    if (rank == 0){
+        row_R = 0;
+    }else{
+        row_R = (NUM_PAGES/size)*rank;
+    }
+    
+    sum = 0;
+    vector_index = 0;
+    local_data_v_temp[vector_index] = 0;
+    // matrix vector multiplicatin
+    for (int i = 0; i < NUM_PAGES * local_bfr_size; i++)
+    {
+
+        if ((i % NUM_PAGES) == 0 && (i!=0))
+        {
+
+            row_R += 1;
+            col_R = 0;
+            sum = 0;
+            vector_index += 1;
+            local_data_v_temp[vector_index] = 0;
+
+            printf("\n");
+        }
+        // matrix vector multiplication (P*r_k)
+        sum += ((local_data_M[i]*r_k[col_R]));
+        // element wise product (r_k * P * r_k) before summation
+        local_data_v_temp[vector_index] = sum*r_k[row_R];
+        col_R += 1;
+    }
+    
+    // gather numerator for Rayleigh-Quotient
+    MPI_Gatherv(local_data_v_temp, local_bfr_size, MPI_DOUBLE, temp, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    // calculate L2 norm of r_k and sum of r_k.P*r_k (dot product)
+    double vector_sum = 0;
+    for (i = 0; i < NUM_PAGES; i++){
+
+        l2_norm += r_k[i]*r_k[i];
+        vector_sum += temp[i];
+    }
+
+    // Rayleigh-Quotient
+    lambda_max = vector_sum/l2_norm;
     end_time = MPI_Wtime();
-    printf("\nRunning Time = %f\n\n", end_time - start_time);
-        
+
+    if (rank == 0)
+    {
+
+        printf("\n\nlambda_max: %f\n", lambda_max);
+        printf("\nRunning Time = %f\n\n", end_time - start_time);
+
+
+    }
+
     MPI_Finalize(); //finalize MPI operations
 
     return 0;
