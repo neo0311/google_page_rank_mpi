@@ -9,7 +9,7 @@
 #include<mpi.h>
 #include<cmath>
 
-#define NUM_PAGES 6 // number of pages, also the matrix size
+#define NUM_PAGES 8 // number of pages, also the matrix size
 #define ITERR 30 // #iterations for power iteration
 
 int rank; //process rank
@@ -91,7 +91,7 @@ int main(int argc, char *argv[])
     double sum;
     double e[NUM_PAGES] = {0};
     double d[NUM_PAGES] = {0};
-    int const rnd_zeros = ((NUM_PAGES*NUM_PAGES)*0.25)/NUM_PAGES; //number of positions in each row to be replaced by 0.
+    int const rnd_zeros = ((NUM_PAGES*NUM_PAGES)*0.30)/NUM_PAGES; //number of positions in each row to be replaced by 0.
 
 
     // initialize variables for loops
@@ -268,7 +268,7 @@ int main(int argc, char *argv[])
                             srand(row_R); // set seed based on global row index
                             // randomly generate indices to be zeroed out
                             index = rand() % ((NUM_PAGES) -1);
-                            if (index != row_R)
+                            //if (index != row_R)
                             {
                                 // to calculate correct index in matrix
                                 local_data_M[matrix_index*NUM_PAGES + index] = 0;
@@ -276,7 +276,7 @@ int main(int argc, char *argv[])
                                 j++;
                             }
                             //printf("\nr:%d, index:%d, (%d,%d)\n", rank, index, row_R, col_R);
-                            // printf("\nrank: %d,index: %d, i: %d, row_R; %d, i+index: %d, L: %8.2f\n", rank, index, i, row_R, i+index, local_data_M[i + index]);
+                            //printf("\nrank: %d,index: %d, i: %d, row_R; %d, i+index: %d, L: %8.2f\n", rank, index, i, row_R, i+index, local_data_M[i + index]);
                         }
                         //printf("\ni: %d, index: %d, local_data: %f\n", (i+index),index, local_data_M[i + index]);
                     }

@@ -48,7 +48,7 @@ double L2norm(vector<double> v, int n)
 
 int main()
 {
-    srand(17);
+    //srand(17);
     
     int n;
     cout << "Pick a dense matrix size: ";
@@ -60,50 +60,50 @@ int main()
         L[i].resize(n, 0);
     }
     // fill dense matrix based on web
-    L[0][1] = 1;
-    L[1][0] = 1;
+    // L[0][1] = 1;
+    // L[1][0] = 1;
 
-    L[2][1] = 1;
-    L[2][4] = 1;
-    L[2][5] = 1;
+    // L[2][1] = 1;
+    // L[2][4] = 1;
+    // L[2][5] = 1;
 
-    L[3][0] = 1;
+    // L[3][0] = 1;
 
-    L[3][4] = 1;
-    L[4][0] = 1;
-    L[4][1] = 1;
+    // L[3][4] = 1;
+    // L[4][0] = 1;
+    // L[4][1] = 1;
 
-    L[4][5] = 1;
-    L[5][2] = 1;
-    L[5][4] = 1;
+    // L[4][5] = 1;
+    // L[5][2] = 1;
+    // L[5][4] = 1;
 
-    // int const rnd_zeros = ((n*n)*0.25)/n;
-    // for (int i = 0; i < n; i++) {//iterate through a given set of rows of [A]
-    //     for (int j = 0; j < n; j++) 
-    //     {
+    int const rnd_zeros = ((n * n) * 0.30) / n;
+    for (int i = 0; i < n; i++) {//iterate through a given set of rows of [A]
+        for (int j = 0; j < n; j++) 
+        {
             
             
-    //         if (i == j) {
-    //             L[i][j] = 0;
-    //         }else {
+            if (i == j) {
+                L[i][j] = 0;
+            }else {
 
-    //             L[i][j] = 1;
+                L[i][j] = 1;
 
-    //             }
-    //     }
-    //     for (int l = 0; l < rnd_zeros;)
-    //     {
+            }
+        }
+        for (int l = 0; l < rnd_zeros;)
+        {   
+            srand(i);
+            int index = rand() % ((n)-1);
+            std::cout << index << std::endl;
+            //if (index != i)
+            {
 
-    //         int index = rand() % ((n) - 1);
-    //         std::cout << index << std::endl;
-    //         if (index != i)
-    //         {
-
-    //             L[i][index] = 0;
-    //             l++;
-    //         }
-    //     }
-    // }
+                L[i][index] = 0;
+                l++;
+            }
+        }
+    }
 
     printf("\nL\n");
     for (int i = 0; i < n; i++)
@@ -286,20 +286,20 @@ int main()
             
                 
         }
-        printf("\n\nIteration: %d\n", k);
-        printf("\n\nq_k\n");
-        for (int i = 0; i < n; i++){
-            printf("%8.2f  ", double(q_k[i]));
-        }
-        printf("\n\nq_k_norm\n");
-        for (int i = 0; i < n; i++){
-            printf("%8.2f  ", double(q_k_norm));
-        }
-        printf("\n\nr_k_1\n");
-        for (int i = 0; i < n; i++){
-            printf("%8.2f  ", double(r_k_1[i]));
+        // printf("\n\nIteration: %d\n", k);
+        // printf("\n\nq_k\n");
+        // for (int i = 0; i < n; i++){
+        //     printf("%8.2f  ", double(q_k[i]));
+        // }
+        // printf("\n\nq_k_norm\n");
+        // for (int i = 0; i < n; i++){
+        //     printf("%8.2f  ", double(q_k_norm));
+        // }
+        // printf("\n\nr_k_1\n");
+        // for (int i = 0; i < n; i++){
+        //     printf("%8.2f  ", double(r_k_1[i]));
 
-        }
+        // }
 
         // printf("\n\nr_k\n");
         // for (int i = 0; i < n; i++){
@@ -346,13 +346,13 @@ int main()
     //     cout << "r_k " << r_k[i] << endl;
     // }
 
-
+    // printf("\nL\n");
     // for (int i = 0; i < n; i++) {
     //     printf("\n");
     //     for (int j = 0; j < n; j++)
     //         printf("%8.2f  ", L[i][j]);
     // }
-    // printf("\n\nQ");
+    // printf("\n\nnLinks");
 
     // for (int i = 0; i < n; i++) {
     //     printf("\n");
@@ -361,7 +361,7 @@ int main()
     // }
     // printf("\n\nd\n");
     // for (int i = 0; i < n; i++){
-    //     printf("%8.2f  ", double(d[i]));
+    //     printf("%d  ", nLinks[i]);
     // }
     // printf("\n\ne_d\n");
     // for (int i = 0; i < n; i++) {
