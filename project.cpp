@@ -51,31 +51,37 @@ int main()
     //srand(17);
     
     int n;
+    int testing;
     cout << "Pick a dense matrix size: ";
     cin >> n;
+    cout << "To test with given web, enter 1 else 0: ";
+    cin >> testing;
+
 
     // Create dense matrix
     vector<vector<double>> L(n);
     for (int i = 0 ; i < n ; i++) {
         L[i].resize(n, 0);
     }
+    if (testing == 1){
     // fill dense matrix based on web
-    // L[0][1] = 1;
-    // L[1][0] = 1;
+    L[0][1] = 1;
+    L[1][0] = 1;
 
-    // L[2][1] = 1;
-    // L[2][4] = 1;
-    // L[2][5] = 1;
+    L[2][1] = 1;
+    L[2][4] = 1;
+    L[2][5] = 1;
 
-    // L[3][0] = 1;
+    L[3][0] = 1;
 
-    // L[3][4] = 1;
-    // L[4][0] = 1;
-    // L[4][1] = 1;
+    L[3][4] = 1;
+    L[4][0] = 1;
+    L[4][1] = 1;
 
-    // L[4][5] = 1;
-    // L[5][2] = 1;
-    // L[5][4] = 1;
+    L[4][5] = 1;
+    L[5][2] = 1;
+    L[5][4] = 1;
+    }else{
 
     int const rnd_zeros = ((n * n) * 0.30) / n;
     for (int i = 0; i < n; i++) {//iterate through a given set of rows of [A]
@@ -103,6 +109,7 @@ int main()
                 l++;
             }
         }
+    }
     }
 
     printf("\nL\n");

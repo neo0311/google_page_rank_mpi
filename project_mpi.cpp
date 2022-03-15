@@ -9,7 +9,7 @@
 #include<mpi.h>
 #include<cmath>
 
-#define NUM_PAGES 6 // number of pages, also the matrix size
+#define NUM_PAGES 8 // number of pages, also the matrix size
 #define ITERR 30 // #iterations for power iteration
 #define test_and_debug 0 // 1 for enabling verbose output and test using given web
 
@@ -75,11 +75,9 @@ int main(int argc, char *argv[])
     //(during columnwise transfer)
     double local_data_M_C[NUM_PAGES* local_bfr_size] = {};
     //for MPI_Reduce
-    double local_sum_arry[size] = {0};
-    double local_sum[size] = {0};
-    int counts_mpiR[size] = {0};
-    int indices_mpiR[size] = {0};
-    double global_sum[size] = {0};
+    double local_sum = 0;
+    double global_sum = 0;
+    double vector_sum = 0;
 
     // initialize required matrices and vectors
     double L[NUM_PAGES][NUM_PAGES] = {0}; 
@@ -123,7 +121,6 @@ int main(int argc, char *argv[])
     for (i = 0; i < size; i++)
     {
         // Calculate the index locations to transfer
-        counts_mpiR[i] = 1;
         if (i == 0)
         {
             indices_M[i] = 0;
@@ -135,7 +132,6 @@ int main(int argc, char *argv[])
             indices_v[i] = indices_v[i-1]+(rows_to_send);
         }
         // Calculate chunk sizes for each chunk
-        indices_mpiR[i] = i;
         if (i + 1 == size)
         {
             counts_M[i] = (rows_to_send+remainder)*NUM_PAGES;
@@ -214,8 +210,6 @@ int main(int argc, char *argv[])
                 printf("%8.2f  ", L[i][j]);
             }  
           
-              
-
         // printf("\ncounts_v");
         // for (i = 0; i < size; i++)
         // {
@@ -580,7 +574,7 @@ int main(int argc, char *argv[])
                 printf("%8.2f  ", P[i][j]);
         }        
     }
-    // **************************************+ Power iteration **************************************
+    // **************************************+ Power iteration *************************************************************
     v = 1;
     stop = 0;
 
@@ -588,7 +582,6 @@ int main(int argc, char *argv[])
 
         if (rank == 0) printf("\nStarted iteration: %d\n", v);
         
-
         //q_k vector//
         local_data_M[local_bfr_size*NUM_PAGES] = {};
         local_data_v[local_bfr_size] = {};
@@ -608,11 +601,9 @@ int main(int argc, char *argv[])
         
         sum = 0;
         vector_index = 0;
-
         // matrix vector multiplicatin
         for (int i = 0; i < NUM_PAGES * local_bfr_size; i++)
         {
-
             if ((i % NUM_PAGES) == 0 && (i!=0))
             {
 
@@ -622,23 +613,32 @@ int main(int argc, char *argv[])
                 vector_index += 1;
 
             }
-
             local_data_v[vector_index] += local_data_M[i]*r_k_1[col_R];
             //printf("[r:%d, ldv:%f, ldM:%f, r_k_1:%f, (%d,%d), vi:%d]", rank, local_data_v[vector_index], local_data_M[i], r_k_1[col_R], row_R,col_R, vector_index);
             col_R += 1;
         }
+
+        // prepare send buffer for MPI_Reduce
+        local_sum = 0;
+        for (int i = 0; i < local_bfr_size; i++)
+        {
+            local_sum += local_data_v[i];
+        }
+        
+        //Gather q_k
         MPI_Gatherv(local_data_v, local_bfr_size, MPI_DOUBLE, q_k, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        //Reduce the local buffer values of q_k
+        MPI_Reduce(&local_sum, &q_k_norm, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
         
         if ((rank == 0) )
         {
+            // q_k_norm = 0;
             
-            q_k_norm = 0;
-            
-            // Calculate L1norm
-            for (i = 0; i < NUM_PAGES; i++)
-            {
-                q_k_norm += fabs(q_k[i]);
-            }
+            // // Calculate L1norm
+            // for (i = 0; i < NUM_PAGES; i++)
+            // {
+            //     q_k_norm += fabs(q_k[i]);
+            // }
 
             if (test_and_debug == 1){
             printf("\n\nq_k after Gather\n");
@@ -668,8 +668,13 @@ int main(int argc, char *argv[])
             local_data_v_r_k[i] = local_data_v_q_k[i]/q_k_norm;
             local_data_v_temp[i] = local_data_v_r_k_1[i];
             local_data_v_r_k_1[i] = local_data_v_r_k[i];
-        }
 
+            // check for convergence
+            if(fabs(local_data_v_temp[i]-local_data_v_r_k[i]) < 0.00001){
+                stop = 1;
+            }else stop = 0;
+        }
+        MPI_Bcast(&stop, 1, MPI_INT, 0, MPI_COMM_WORLD);
         MPI_Gatherv(local_data_v_q_k, local_bfr_size, MPI_DOUBLE, 
                 q_k, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         MPI_Gatherv(local_data_v_temp, local_bfr_size, MPI_DOUBLE, 
@@ -689,7 +694,6 @@ int main(int argc, char *argv[])
                 }  
             } 
             printf("\nFinished iteration: %d\n", v);
-    
         }
 
         v++;
@@ -697,13 +701,12 @@ int main(int argc, char *argv[])
             stop = 1;
         }
         MPI_Bcast(&stop, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
     }
 
     if (rank == 0)
     {
         sum= 0;
-        printf("\n\nFinal r_k (r) after Gather\n");
+        printf("\n\nFinal r_k (r) after Gather:\n");
         for (i = 0; i < NUM_PAGES; i++) {
             sum+=r_k[i];
             printf("%f  ", r_k[i]);
@@ -714,11 +717,16 @@ int main(int argc, char *argv[])
     // *********************************************** largest eigenvalue calculation *******************************
     local_data_M[local_bfr_size*NUM_PAGES] = {};
     local_data_v_temp[local_bfr_size] = {};
+    local_data_v_r_k[local_bfr_size] = {};
     temp[NUM_PAGES] = {};
+
+    //Scatter P, r_k 
     MPI_Scatterv(&P, counts_M, indices_M, MPI_DOUBLE,
                  &local_data_M, local_bfr_size * NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     MPI_Scatterv(&temp, counts_v, indices_v, MPI_DOUBLE,
                 &local_data_v_temp, local_bfr_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Scatterv(&r_k, counts_v, indices_v, MPI_DOUBLE,
+                &local_data_v_r_k, local_bfr_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     MPI_Bcast(&r_k, NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     col_R = 0;
@@ -752,31 +760,48 @@ int main(int argc, char *argv[])
         local_data_v_temp[vector_index] = sum*r_k[row_R];
         col_R += 1;
     }
-    
+
+    local_sum = 0;
+    // find local sum of r_k * P * r_k vector - to get dot product
+    for(i = 0; i < local_bfr_size; i++){
+
+        local_sum+=local_data_v_temp[i];
+    }
     // gather numerator for Rayleigh-Quotient
     MPI_Gatherv(local_data_v_temp, local_bfr_size, MPI_DOUBLE, temp, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    
+    vector_sum = 0;
+    //Reduce the local buffer values of r_k * P * r_k vector 
+    MPI_Reduce(&local_sum, &vector_sum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 
     // calculate L2 norm of r_k and sum of r_k.P*r_k (dot product)
-    double vector_sum = 0;
-    for (i = 0; i < NUM_PAGES; i++){
+    // for (i = 0; i < NUM_PAGES; i++){
 
-        l2_norm += r_k[i]*r_k[i];
-        vector_sum += temp[i];
+    //     l2_norm += r_k[i]*r_k[i];
+    //     vector_sum += temp[i];
+    // }
+
+    // find l2 norm of r_k
+    local_sum = 0;
+    for(i = 0; i < local_bfr_size; i++){
+
+        local_sum+=local_data_v_r_k[i]*local_data_v_r_k[i];
     }
 
-    // Rayleigh-Quotient
-    lambda_max = vector_sum/l2_norm;
-    end_time = MPI_Wtime();
+    //Reduce the local buffer to l2 norm
+    MPI_Reduce(&local_sum, &l2_norm, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    
 
     if (rank == 0)
     {
-
+        // Rayleigh-Quotient
+        lambda_max = vector_sum/l2_norm;
         printf("\nlambda_max: %f\n", lambda_max);
-        printf("\nRunning Time = %f\n", end_time - start_time);
-
-
+        
     }
+    end_time = MPI_Wtime();
 
+    if (rank == 0) printf("\nRunning Time = %f\n", end_time - start_time);
     MPI_Finalize(); //finalize MPI operations
 
     return 0;
