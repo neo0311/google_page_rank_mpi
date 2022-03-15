@@ -9,8 +9,9 @@
 #include<mpi.h>
 #include<cmath>
 
-#define NUM_PAGES 8 // number of pages, also the matrix size
+#define NUM_PAGES 6 // number of pages, also the matrix size
 #define ITERR 30 // #iterations for power iteration
+#define test_and_debug 0 // 1 for enabling verbose output and test using given web
 
 int rank; //process rank
 int size; //number of processes
@@ -73,6 +74,12 @@ int main(int argc, char *argv[])
     double local_data_v_q_k[local_bfr_size] = {};
     //(during columnwise transfer)
     double local_data_M_C[NUM_PAGES* local_bfr_size] = {};
+    //for MPI_Reduce
+    double local_sum_arry[size] = {0};
+    double local_sum[size] = {0};
+    int counts_mpiR[size] = {0};
+    int indices_mpiR[size] = {0};
+    double global_sum[size] = {0};
 
     // initialize required matrices and vectors
     double L[NUM_PAGES][NUM_PAGES] = {0}; 
@@ -116,23 +123,28 @@ int main(int argc, char *argv[])
     for (i = 0; i < size; i++)
     {
         // Calculate the index locations to transfer
-        if(i==0){
+        counts_mpiR[i] = 1;
+        if (i == 0)
+        {
             indices_M[i] = 0;
             indices_v[i] = 0;
-
-        }else{
+        }
+        else
+        {
             indices_M[i] = indices_M[i-1]+(NUM_PAGES*rows_to_send);
             indices_v[i] = indices_v[i-1]+(rows_to_send);
         }
         // Calculate chunk sizes for each chunk
-        if(i+1 == size){
+        indices_mpiR[i] = i;
+        if (i + 1 == size)
+        {
             counts_M[i] = (rows_to_send+remainder)*NUM_PAGES;
             counts_v[i] = (rows_to_send+remainder);
-
-        }else{
+        }
+        else
+        {
             counts_M[i] = rows_to_send*NUM_PAGES;
             counts_v[i] = rows_to_send;
-
         }
     }
 
@@ -140,43 +152,51 @@ int main(int argc, char *argv[])
     /* master initializes work*/
     if (rank == 0) {
 
+        if (test_and_debug == 1){
+
+            testing = 1;
+
             printf("\ncounts_M");
-        for (i = 0; i < size; i++)
-        {
-            printf("%8.2d  ", counts_M[i]);
+            for (i = 0; i < size; i++)
+            {
+                printf("%8.2d  ", counts_M[i]);
+            }
+            printf("\nindices_M");
+            for (i = 0; i < size; i++)
+            {
+                printf("%8.2d  ", indices_M[i]);
+            }
+
+            // ask user input to choose testing or random
+            printf("\nTest with given web? Then enter 1, else 0: ");
+            fflush(stdout);
+            scanf("%d", &testing);
+            //std::cin >> testing;
+
+            // fill dense matrix based on web
+            if (testing ==1){
+            L[0][1] = 1;
+            L[1][0] = 1;
+
+            L[2][1] = 1;
+            L[2][4] = 1;
+            L[2][5] = 1;
+
+            L[3][0] = 1;
+
+            L[3][4] = 1;
+            L[4][0] = 1;
+            L[4][1] = 1;
+
+            L[4][5] = 1;
+            L[5][2] = 1;
+            L[5][4] = 1;
+            }
+        }else{
+
+            printf("\nNumber of pages: %d\nIterations: %d\n", NUM_PAGES, ITERR);
+            testing = 0;
         }
-        printf("\nindices_M");
-        for (i = 0; i < size; i++)
-        {
-            printf("%8.2d  ", indices_M[i]);
-        }
-
-        // ask user input to choose testing or random
-        printf("\nTest with given web? Then enter 1, else 0: ");
-        fflush(stdout);
-        scanf("%d", &testing);
-        //std::cin >> testing;
-
-        // fill dense matrix based on web
-        if (testing ==1){
-        L[0][1] = 1;
-        L[1][0] = 1;
-
-        L[2][1] = 1;
-        L[2][4] = 1;
-        L[2][5] = 1;
-
-        L[3][0] = 1;
-
-        L[3][4] = 1;
-        L[4][0] = 1;
-        L[4][1] = 1;
-
-        L[4][5] = 1;
-        L[5][2] = 1;
-        L[5][4] = 1;
-        }
-
     }
 
     MPI_Bcast(&testing, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -185,14 +205,16 @@ int main(int argc, char *argv[])
     MPI_Scatterv(&L, counts_M, indices_M, MPI_DOUBLE,
                 &local_data_M, local_bfr_size * NUM_PAGES, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     
-    if (rank == 0){
+    if ((rank == 0) && (test_and_debug == 1)){
 
-        printf("\n\nL before Gather\n");
+        printf("\nL before Gather\n");
         for (i = 0; i < NUM_PAGES; i++) {
             printf("\n\n");
             for (j = 0; j < NUM_PAGES; j++)
                 printf("%8.2f  ", L[i][j]);
-        }  
+            }  
+          
+              
 
         // printf("\ncounts_v");
         // for (i = 0; i < size; i++)
@@ -289,7 +311,7 @@ int main(int argc, char *argv[])
     if (rank == 0)
     {
 
-        printf("\n\nL after Gather\n");
+        printf("\n\nL Matrix\n");
         for (i = 0; i < NUM_PAGES; i++)
         {
             printf("\n\n");
@@ -298,7 +320,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    if (rank == 0){
+    if ((rank == 0) && (test_and_debug == 1)){
 
         printf("\n\nr before Gather\n");
         for (i = 0; i < NUM_PAGES; i++) {
@@ -319,7 +341,7 @@ int main(int argc, char *argv[])
     MPI_Gatherv(local_data_v, local_bfr_size, MPI_DOUBLE, r, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     MPI_Gatherv(local_data_v, local_bfr_size, MPI_DOUBLE, r_k_1, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-    if (rank == 0){
+    if ((rank == 0) && (test_and_debug == 1)){
 
         printf("\n\nr after Gather\n");
         for (i = 0; i < NUM_PAGES; i++) {
@@ -468,7 +490,7 @@ int main(int argc, char *argv[])
 
     MPI_Gatherv(local_data_v, local_bfr_size, MPI_DOUBLE, d, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-    if (rank == 0){
+    if ((rank == 0) && (test_and_debug == 1)){
 
         printf("\n\nd after Gather\n");
         for (i = 0; i < NUM_PAGES; i++) {
@@ -509,7 +531,7 @@ int main(int argc, char *argv[])
 
     MPI_Gatherv(local_data_M, local_bfr_size * NUM_PAGES, MPI_DOUBLE, e_d, counts_M, indices_M, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-    if (rank == 0){
+    if ((rank == 0) && (test_and_debug == 1)){
 
         printf("\n\ne_d after Gather\n");
         for (i = 0; i < NUM_PAGES; i++) {
@@ -549,7 +571,7 @@ int main(int argc, char *argv[])
 
     MPI_Gatherv(local_data_M, local_bfr_size * NUM_PAGES, MPI_DOUBLE, P, counts_M, indices_M, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-    if (rank == 0){
+    if ((rank == 0) && (test_and_debug == 1)){
 
         printf("\n\nP after Gather\n");
         for (i = 0; i < NUM_PAGES; i++) {
@@ -607,13 +629,9 @@ int main(int argc, char *argv[])
         }
         MPI_Gatherv(local_data_v, local_bfr_size, MPI_DOUBLE, q_k, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         
-        if (rank == 0)
+        if ((rank == 0) )
         {
-
-            printf("\n\nq_k after Gather\n");
-            for (i = 0; i < NUM_PAGES; i++) {
-                printf("%8.2f  ", q_k[i]);
-            }     
+            
             q_k_norm = 0;
             
             // Calculate L1norm
@@ -621,7 +639,15 @@ int main(int argc, char *argv[])
             {
                 q_k_norm += fabs(q_k[i]);
             }
+
+            if (test_and_debug == 1){
+            printf("\n\nq_k after Gather\n");
+            for (i = 0; i < NUM_PAGES; i++) {
+                printf("%8.2f  ", q_k[i]);
+            }     
+            
             printf("\nq_k norm: %f\n", q_k_norm);
+            }
 
         }
 
@@ -644,24 +670,30 @@ int main(int argc, char *argv[])
             local_data_v_r_k_1[i] = local_data_v_r_k[i];
         }
 
-        MPI_Gatherv(local_data_v_q_k, local_bfr_size, MPI_DOUBLE, q_k, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-        MPI_Gatherv(local_data_v_temp, local_bfr_size, MPI_DOUBLE, temp, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-        MPI_Gatherv(local_data_v_r_k_1, local_bfr_size, MPI_DOUBLE, r_k_1, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-        MPI_Gatherv(local_data_v_r_k, local_bfr_size, MPI_DOUBLE, r_k, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Gatherv(local_data_v_q_k, local_bfr_size, MPI_DOUBLE, 
+                q_k, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Gatherv(local_data_v_temp, local_bfr_size, MPI_DOUBLE, 
+                temp, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Gatherv(local_data_v_r_k_1, local_bfr_size, MPI_DOUBLE, 
+                r_k_1, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Gatherv(local_data_v_r_k, local_bfr_size, MPI_DOUBLE, 
+                r_k, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
         if (rank == 0)
-        {
-            printf("\n\nr_k after Gather_inside_loop\n");
-            for (i = 0; i < NUM_PAGES; i++) {
-                sum+=r_k[i];
-                printf("%8.2f  ", r_k[i]);
-            }   
+        {   
+            if (test_and_debug == 1){
+                printf("\n\nr_k after Gather_inside_loop\n");
+                for (i = 0; i < NUM_PAGES; i++) {
+                    sum+=r_k[i];
+                    printf("%8.2f  ", r_k[i]);
+                }  
+            } 
             printf("\nFinished iteration: %d\n", v);
     
         }
 
         v++;
-        if (v>=ITERR){
+        if (v>ITERR){
             stop = 1;
         }
         MPI_Bcast(&stop, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -670,14 +702,13 @@ int main(int argc, char *argv[])
 
     if (rank == 0)
     {
-
         sum= 0;
-        printf("\n\nr_k after Gather\n");
+        printf("\n\nFinal r_k (r) after Gather\n");
         for (i = 0; i < NUM_PAGES; i++) {
             sum+=r_k[i];
-            printf("%8.2f  ", r_k[i]);
+            printf("%f  ", r_k[i]);
         }   
-        printf("\nSum: %8.2f\n", sum);
+        printf("\n\nSum: %8.2f\n", sum);
     }
 
     // *********************************************** largest eigenvalue calculation *******************************
@@ -740,8 +771,8 @@ int main(int argc, char *argv[])
     if (rank == 0)
     {
 
-        printf("\n\nlambda_max: %f\n", lambda_max);
-        printf("\nRunning Time = %f\n\n", end_time - start_time);
+        printf("\nlambda_max: %f\n", lambda_max);
+        printf("\nRunning Time = %f\n", end_time - start_time);
 
 
     }
