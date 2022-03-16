@@ -9,9 +9,9 @@
 #include<mpi.h>
 #include<cmath>
 
-#define NUM_PAGES 8 // number of pages, also the matrix size
+#define NUM_PAGES 100 // number of pages, also the matrix size
 #define ITERR 30 // #iterations for power iteration
-#define test_and_debug 0 // 1 for enabling verbose output and test using given web
+#define test_and_debug 0 // 1 for enabling verbose output and test using given web, 0 for randomly generated L matrix
 
 int rank; //process rank
 int size; //number of processes
@@ -23,13 +23,12 @@ MPI_Request request; //capture request of a MPI_Isend
 
 int main(int argc, char *argv[])
 {   
-    start_time = MPI_Wtime();
     //srand(17); // set random seed
-
     MPI_Init(&argc, &argv);               //initialize MPI operations
     MPI_Comm_rank(MPI_COMM_WORLD, &rank); //get the rank
     MPI_Comm_size(MPI_COMM_WORLD, &size); //get number of processes
 
+    start_time = MPI_Wtime();
 
     // remaining portion after dividing the matrix dims equally for processes
     int remainder = NUM_PAGES % size; 
@@ -78,6 +77,8 @@ int main(int argc, char *argv[])
     double local_sum = 0;
     double global_sum = 0;
     double vector_sum = 0;
+    double duration = 0;
+    double total_time = 0;
 
     // initialize required matrices and vectors
     double L[NUM_PAGES][NUM_PAGES] = {0}; 
@@ -148,6 +149,8 @@ int main(int argc, char *argv[])
     /* master initializes work*/
     if (rank == 0) {
 
+        printf("\nNo. of ranks: %d\n", size);
+
         if (test_and_debug == 1){
 
             testing = 1;
@@ -164,13 +167,13 @@ int main(int argc, char *argv[])
             }
 
             // ask user input to choose testing or random
-            printf("\nTest with given web? Then enter 1, else 0: ");
-            fflush(stdout);
-            scanf("%d", &testing);
-            //std::cin >> testing;
+            // printf("\nTest with given web? Then enter 1, else 0: ");
+            // fflush(stdout);
+            // scanf("%d", &testing);
+            // //std::cin >> testing;
 
             // fill dense matrix based on web
-            if (testing ==1){
+            //if (testing ==1){
             L[0][1] = 1;
             L[1][0] = 1;
 
@@ -187,7 +190,7 @@ int main(int argc, char *argv[])
             L[4][5] = 1;
             L[5][2] = 1;
             L[5][4] = 1;
-            }
+            
         }else{
 
             printf("\nNumber of pages: %d\nIterations: %d\n", NUM_PAGES, ITERR);
@@ -641,7 +644,7 @@ int main(int argc, char *argv[])
             // }
 
             if (test_and_debug == 1){
-            printf("\n\nq_k after Gather\n");
+            printf("\nq_k after Gather\n");
             for (i = 0; i < NUM_PAGES; i++) {
                 printf("%8.2f  ", q_k[i]);
             }     
@@ -669,11 +672,12 @@ int main(int argc, char *argv[])
             local_data_v_temp[i] = local_data_v_r_k_1[i];
             local_data_v_r_k_1[i] = local_data_v_r_k[i];
 
-            // check for convergence
-            if(fabs(local_data_v_temp[i]-local_data_v_r_k[i]) < 0.00001){
-                stop = 1;
-            }else stop = 0;
         }
+        // check for convergence
+        //     if(fabs(local_data_v_temp[i]-local_data_v_r_k[i]) < 0.00001){
+        //         stop = 1;
+        //     }else stop = 0;
+        // }
         MPI_Bcast(&stop, 1, MPI_INT, 0, MPI_COMM_WORLD);
         MPI_Gatherv(local_data_v_q_k, local_bfr_size, MPI_DOUBLE, 
                 q_k, counts_v, indices_v, MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -687,13 +691,13 @@ int main(int argc, char *argv[])
         if (rank == 0)
         {   
             if (test_and_debug == 1){
-                printf("\n\nr_k after Gather_inside_loop\n");
+                printf("\nr_k after Gather_inside_loop\n");
                 for (i = 0; i < NUM_PAGES; i++) {
                     sum+=r_k[i];
                     printf("%8.2f  ", r_k[i]);
                 }  
             } 
-            printf("\nFinished iteration: %d\n", v);
+            printf("\nFinished iteration: %d", v);
         }
 
         v++;
@@ -706,12 +710,12 @@ int main(int argc, char *argv[])
     if (rank == 0)
     {
         sum= 0;
-        printf("\n\nFinal r_k (r) after Gather:\n");
+        printf("\nFinal r_k (r) after Gather:\n");
         for (i = 0; i < NUM_PAGES; i++) {
             sum+=r_k[i];
             printf("%f  ", r_k[i]);
         }   
-        printf("\n\nSum: %8.2f\n", sum);
+        printf("\nSum of r vector: %8.2f\n", sum);
     }
 
     // *********************************************** largest eigenvalue calculation *******************************
@@ -752,7 +756,6 @@ int main(int argc, char *argv[])
             vector_index += 1;
             local_data_v_temp[vector_index] = 0;
 
-            printf("\n");
         }
         // matrix vector multiplication (P*r_k)
         sum += ((local_data_M[i]*r_k[col_R]));
@@ -796,12 +799,16 @@ int main(int argc, char *argv[])
     {
         // Rayleigh-Quotient
         lambda_max = vector_sum/l2_norm;
-        printf("\nlambda_max: %f\n", lambda_max);
+        printf("\nlambda_max: %8.2f\n", lambda_max);
+        printf("\nNo. of ranks: %d\n", size);
         
     }
+    MPI_Barrier(MPI_COMM_WORLD);
     end_time = MPI_Wtime();
+    duration = end_time - start_time;
+    MPI_Reduce(&duration,&total_time,1,MPI_DOUBLE,MPI_MAX,0,MPI_COMM_WORLD);
 
-    if (rank == 0) printf("\nRunning Time = %f\n", end_time - start_time);
+    if (rank == 0) printf("Running Time = %f", total_time);
     MPI_Finalize(); //finalize MPI operations
 
     return 0;
